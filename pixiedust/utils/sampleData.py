@@ -76,14 +76,15 @@ dataDefs = OrderedDict([
 ])
 
 @scalaGateway
-def sampleData(dataId=None):
+def sampleData(dataId=None, **kwargs):
     global dataDefs
-    return SampleData(dataDefs).sampleData(dataId)
+    return SampleData(dataDefs, **kwargs).sampleData(dataId)
 
 class SampleData(object):
     env = PixiedustTemplateEnvironment()
-    def __init__(self, dataDefs):
+    def __init__(self, dataDefs, **kwargs):
         self.dataDefs = dataDefs
+        self.kwargs = kwargs
 
     def sampleData(self, dataId = None):
         if dataId is None:
@@ -102,6 +103,8 @@ class SampleData(object):
         #    print("{0}: {1}".format(key, val["displayName"]))
 
     def dataLoader(self, path, schema=None):
+        delimiter = self.kwargs.get('delimiter', ',')
+        header = self.kwargs.get('header', True)
         if schema is not None and Environment.hasSpark:
             from pyspark.sql.types import StructType,StructField,IntegerType,DoubleType,StringType
             def getType(t):
@@ -114,7 +117,8 @@ class SampleData(object):
 
         if Environment.sparkVersion == 1:
             print("Loading file using 'com.databricks.spark.csv'")
-            load = ShellAccess.sqlContext.read.format('com.databricks.spark.csv')
+
+            load = ShellAccess.sqlContext.read.format('com.databricks.spark.csv', delimiter=delimiter, header=header)
             if schema is not None:
                 return load.options(header='true', mode="DROPMALFORMED").load(path, schema=StructType([StructField(item[0], getType(item[1]), True) for item in schema]))
             else:
@@ -127,7 +131,7 @@ class SampleData(object):
                 return ShellAccess.SparkSession.builder.getOrCreate().read.csv(path, header=True, mode="DROPMALFORMED", inferSchema='true')
         else:
             print("Loading file using 'pandas'")
-            return pd.read_csv(path)
+            return pd.read_csv(path,sep=delimiter, header=0 if header else None)
 
     def loadSparkDataFrameFromSampleData(self, dataDef):
         return Downloader(dataDef).download(self.dataLoader)
